@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.add_column('users', sa.Column('date_of_birth', sa.Date(), nullable=True))
     op.add_column('users', sa.Column('gender', sa.String(length=20), nullable=True))
     op.add_column('users', sa.Column('address', sa.String(length=500), nullable=True))
-    op.add_column('users', sa.Column('preferred_language', sa.String(length=50), nullable=False))
+    op.add_column('users', sa.Column('preferred_language', sa.String(length=50), server_default='English', nullable=False))
     # ### end Alembic commands ###
 
 
