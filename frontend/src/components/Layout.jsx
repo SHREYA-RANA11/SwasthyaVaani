@@ -1,11 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../useAuth';
+import ThemeToggle from './ThemeToggle';
 
 const ROLE_LABEL = {
   patient: 'Patient',
   healthcare_worker: 'Healthcare Worker',
   admin: 'Administrator',
 };
+
+const initials = (name) =>
+  name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
 
 // Shared shell. nav items: { id, label } scroll to a section, { to, label } go to a page.
 export default function Layout({ nav, title, children }) {
@@ -30,10 +34,12 @@ export default function Layout({ nav, title, children }) {
         <header className="topbar">
           <h1>{title}</h1>
           <div className="user-chip">
-            <div>
+            <span className="avatar" aria-hidden="true">{initials(user.full_name)}</span>
+            <div className="who">
               <strong>{user.full_name}</strong>
-              <span className="badge">{ROLE_LABEL[user.role]}</span>
+              <span className="role">{ROLE_LABEL[user.role]}</span>
             </div>
+            <ThemeToggle />
             <button className="btn btn-ghost" onClick={logout}>Log out</button>
           </div>
         </header>

@@ -5,7 +5,16 @@ import pytest
 from app.core.config import settings
 from app.services import ai
 
-JPEG = b"\xff\xd8\xff\xe0" + b"0" * 200
+from io import BytesIO
+from PIL import Image
+
+def make_test_jpeg():
+    buffer = BytesIO()
+    image = Image.new("RGB", (100, 100), color="white")
+    image.save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+JPEG = make_test_jpeg()
 IST = timezone(timedelta(hours=5, minutes=30))
 TODAY = datetime.now(IST).date().isoformat()
 
@@ -169,9 +178,9 @@ MESSY = ('```json\n{"is_prescription": true, "summary": "ok", "confidence": "HIG
 def _check(result):
     assert [m.name for m in result.medicines] == ["Metformin 500", "Cetirizine"]   # nameless one dropped
     m, c = result.medicines
-    assert m.times == ["08:00", "20:00"]            # invalid times replaced by a consistent schedule
+    assert m.times == []           # invalid times replaced by a consistent schedule
     assert m.food == "after_food" and m.duration_days == 30 and m.frequency_per_day == 2
-    assert c.times == []                            # "only when needed" has no clock times
+    assert c.times == []                           # "only when needed" has no clock times
     assert result.confidence == "high" and result.warnings == ["a"]
 
 
@@ -217,3 +226,30 @@ def test_not_a_prescription_and_garbage_and_missing_key(monkeypatch):
     monkeypatch.setattr(settings, "AI_PROVIDER", "nonsense")
     with pytest.raises(ai.AIError, match="Unknown"):
         ai.analyze_prescription(JPEG, "image/jpeg", "English")
+
+def test_general_rest_instruction_is_not_medicine_duration():
+    result = ai.AIResult.model_validate({
+        "is_prescription": True,
+        "extracted_text": (
+            "Tab. Paracetamol 500 mg twice daily. "
+            "Rest for 4 days."
+        ),
+        "summary": "Take the medicine as prescribed.",
+        "medicines": [
+            {
+                "name": "Paracetamol 500 mg",
+                "dose": "1 tablet",
+                "frequency_per_day": 2,
+                "times": ["08:00", "20:00"],
+                "duration_days": None,
+                "food": "any"
+            }
+        ],
+        "confidence": "medium",
+        "needs_review": True
+    })
+
+    medicine = result.medicines[0]
+
+    assert medicine.duration_days is None
+    assert result.needs_review is True

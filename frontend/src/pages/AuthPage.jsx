@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../useAuth';
 import { errorMessage } from '../api';
 import { HOME_BY_ROLE } from '../roles';
+import ThemeToggle from '../components/ThemeToggle';
 
 export default function AuthPage() {
   const { login, register } = useAuth();
@@ -45,13 +46,15 @@ export default function AuthPage() {
 
   return (
     <div className="auth-wrap">
+      <div className="auth-theme"><ThemeToggle /></div>
       <div className="auth-hero">
-        <h1>SwasthyaVaani</h1>
-        <p>Understand your prescriptions in your own language — Hindi, Gujarati and more.</p>
-        <ul>
-          <li>Prescription translation and simple explanations</li>
-          <li>Voice guidance for patients who cannot read</li>
-          <li>Medication reminders and emergency help</li>
+        <div className="hero-brand"><span className="brand-mark">+</span> SwasthyaVaani</div>
+        <h1>Understand your medicines in your own language</h1>
+        <p>Take a photo of your prescription. We explain it in simple Hindi, Gujarati or English, and read it aloud.</p>
+        <ul className="hero-points">
+          <li><span className="ico">📷</span><div><strong>Photo to explanation</strong><small>No typing, no medical jargon</small></div></li>
+          <li><span className="ico">🔊</span><div><strong>Voice guidance</strong><small>For patients who cannot read</small></div></li>
+          <li><span className="ico">⏰</span><div><strong>Medicine reminders</strong><small>Never miss a dose, works offline</small></div></li>
         </ul>
       </div>
 

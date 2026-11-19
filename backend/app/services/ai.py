@@ -6,10 +6,12 @@ translation together. Providers: gemini | anthropic | openai | mock.
 import base64
 import json
 import re
+from io import BytesIO
 from typing import List, Optional
 
 import httpx
 from pydantic import BaseModel, Field, field_validator
+from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
 
 from app.core.config import settings
 
@@ -63,10 +65,13 @@ class AIMedicine(BaseModel):
     @field_validator("frequency_per_day", mode="before")
     @classmethod
     def _freq(cls, v):
-        try:
-            return max(0, min(6, int(v)))
-        except (TypeError, ValueError):
-            return 1
+     try:
+        value = int(v)
+        if not 0 <= value <= 6:
+            raise ValueError("Invalid medicine frequency")
+        return value
+     except (TypeError, ValueError):
+        raise ValueError("Medicine frequency is unclear")
 
     @field_validator("duration_days", mode="before")
     @classmethod
@@ -92,11 +97,15 @@ class AIMedicine(BaseModel):
         return sorted(set(clean))
 
     def finalize(self) -> "AIMedicine":
-        """Make the schedule consistent: times must match the daily frequency."""
+        """
+        Keep only explicitly extracted medicine timings.
+        Never invent clock times when the prescription is unclear.
+        """
         if self.frequency_per_day == 0:
             self.times = []
         elif len(self.times) != self.frequency_per_day:
-            self.times = DEFAULT_TIMES[self.frequency_per_day]
+            self.times = []
+
         return self
 
 
@@ -156,13 +165,47 @@ Rules:
    simple, everyday words a person with little schooling can understand. No medical jargon.
 4. Understand common abbreviations: OD/QD = once a day, BD/BID = twice a day, TDS/TID = three times a day,
    QID = four times a day, HS = at bedtime, SOS/PRN = only when needed, AC = before food, PC = after food.
-5. "times" are 24-hour "HH:MM" clock times, one per daily dose. If the paper does not give clock times, use:
-   once -> 08:00; twice -> 08:00 and 20:00; three times -> 08:00, 14:00, 20:00.
+5. "times" are 24-hour "HH:MM" clock times.
+
+   Only extract clock times when they are explicitly written
+   in the prescription.
+
+   Do not invent or assume clock times based on frequency.
+
+   If the prescription says once daily, twice daily,
+   or three times daily but does not specify clock times:
+   - Extract frequency_per_day correctly.
+   - Set times to an empty list.
+   - Set needs_review to true.
+
+   Never present suggested timings as doctor's instructions.
 6. "frequency_per_day" is an integer 0-6 (0 = only when needed, with an empty "times" list).
 7. "food" is one of: before_food, after_food, with_food, any.
 8. If the image is not a medical document, set "is_prescription" to false and leave the lists empty.
 9. Set "confidence" to high, medium or low. Set "needs_review" to true if handwriting is hard to read,
    any dose is unclear, or you are less than very sure about any medicine.
+
+10. STRICT MEDICINE DURATION RULE:
+    A medicine's duration must come only from an instruction that
+    clearly applies to that specific medicine.
+
+    NEVER interpret general advice such as:
+    - "Rest for 4 days"
+    - "Take rest"
+    - "Follow up after 4 days"
+    - "Review after one week"
+
+    as the duration of a medicine.
+
+    Only extract duration when the prescription explicitly links
+    the duration to a particular medicine, such as:
+    "Amoxicillin 250 mg - three times daily for 5 days."
+
+    If the duration is missing, ambiguous, or cannot confidently
+    be linked to that medicine:
+    - Set duration_days to null.
+    - Set needs_review to true.
+    - Do not invent a duration.
 
 Reply with ONE JSON object and nothing else, in exactly this shape:
 {
@@ -172,7 +215,7 @@ Reply with ONE JSON object and nothing else, in exactly this shape:
   "extracted_text": "full text as printed, in its original language",
   "summary": "2-4 simple sentences: what this prescription is for and what the patient should do",
   "medicines": [
-    {"name": "", "dose": "", "frequency_per_day": 1, "times": ["08:00"], "duration_days": 5,
+    {"name": "", "dose": null, "frequency_per_day": 1, "times": [], "duration_days": null,
      "food": "after_food", "instructions_simple": "", "instructions_original": ""}
   ],
   "warnings": ["important cautions, e.g. finish the full course, avoid alcohol, see a doctor if symptoms worsen"],
@@ -330,6 +373,69 @@ def _mock(language: str) -> AIResult:
     )
 
 
+def _preprocess_image(image_bytes: bytes, mime: str) -> tuple[bytes, str]:
+    """
+    Prepare a separate image copy for AI analysis.
+    The original uploaded prescription remains unchanged.
+    """
+    try:
+        with Image.open(BytesIO(image_bytes)) as original:
+            original.load()
+
+            # Correct orientation using EXIF metadata.
+            img = ImageOps.exif_transpose(original)
+
+            # Convert transparent images onto a white background.
+            if img.mode in ("RGBA", "LA") or "transparency" in img.info:
+                rgba = img.convert("RGBA")
+                background = Image.new("RGB", rgba.size, "white")
+                background.paste(rgba, mask=rgba.getchannel("A"))
+                img = background
+            else:
+                img = img.convert("RGB")
+
+            # Resize only when the image is larger than 2400 pixels.
+            max_dimension = 2400
+
+            if max(img.size) > max_dimension:
+                ratio = max_dimension / max(img.size)
+
+                new_size = (
+                    max(1, round(img.width * ratio)),
+                    max(1, round(img.height * ratio)),
+                )
+
+                img = img.resize(
+                    new_size,
+                    Image.Resampling.LANCZOS,
+                )
+
+            # Apply mild contrast enhancement.
+            img = ImageEnhance.Contrast(img).enhance(1.10)
+
+            # Encode an optimized JPEG for vision analysis.
+            output = BytesIO()
+            img.save(
+                output,
+                format="JPEG",
+                quality=92,
+                optimize=True,
+            )
+
+            return output.getvalue(), "image/jpeg"
+
+    except (
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+        Image.DecompressionBombError,
+    ):
+        raise AIError(
+            "The prescription image could not be processed. "
+            "Please upload a clear JPG, PNG or WEBP image."
+        )
+
+
 # ---------- public entry point ----------
 
 def _parse_json(text: str) -> dict:
@@ -358,6 +464,9 @@ def analyze_prescription(image: bytes, mime: str, language: str) -> AIResult:
     if not settings.AI_API_KEY:
         raise AIError("AI_API_KEY is not set on the server.")
 
+    # Preprocess a separate copy before sending it to the vision model.
+    image, mime = _preprocess_image(image, mime)
+
     raw = callers[provider](image, mime, language)
     payload = _parse_json(raw)
     try:
@@ -365,11 +474,27 @@ def analyze_prescription(image: bytes, mime: str, language: str) -> AIResult:
     except Exception:
         raise AIError("The AI returned incomplete data. Please try again with a clearer photo.")
 
-    # Drop medicines the model returned without a usable name, and make schedules consistent
+    # Finalize medicine timings without inventing clock times.
     result.medicines = [m.finalize() for m in result.medicines]
+
     if not result.is_prescription:
-        raise AIError("This does not look like a prescription or medical document. Please upload a clear photo of one.")
-    # Safety rule: never let an unsure result look final
+        raise AIError(
+        "This does not look like a prescription or medical document. "
+        "Please upload a clear photo of one."
+    )
+
+# Require healthcare-worker review when important information is missing.
     if result.confidence == "low" or not result.medicines:
+       result.needs_review = True
+
+    for medicine in result.medicines:
+      if (
+        not medicine.dose
+        or medicine.duration_days is None
+        or (
+            medicine.frequency_per_day > 0
+            and not medicine.times
+        )
+    ):
         result.needs_review = True
     return result

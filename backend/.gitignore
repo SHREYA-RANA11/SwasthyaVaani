@@ -1,6 +1,6 @@
-# Secrets
+# Environment variables
 .env
-*.env
+.env.*
 !.env.example
 
 # Python
@@ -10,16 +10,22 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
-# Uploaded patient files (never commit medical data)
-backend/uploads/*
-!backend/uploads/.gitkeep
-
-# Node (for the frontend later)
+# Node
 node_modules/
 dist/
-build/
 
-# OS / editor
-.DS_Store
-Thumbs.db
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+
+# Uploads and private files
+uploads/
+media/
+
+# Logs and IDE
+*.log
 .vscode/
+.idea/
