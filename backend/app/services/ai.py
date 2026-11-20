@@ -498,3 +498,10 @@ def analyze_prescription(image: bytes, mime: str, language: str) -> AIResult:
     ):
         result.needs_review = True
     return result
+def test_small_image_dimensions_preserved():
+    original = create_image("JPEG", size=(400, 300))
+
+    processed, mime = _preprocess_image(original, "image/jpeg")
+
+    with Image.open(BytesIO(processed)) as image:
+        assert image.size == (400, 300)
