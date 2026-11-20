@@ -165,9 +165,29 @@ SYSTEM_PROMPT = """You are a careful assistant that helps rural patients in Indi
 You will be shown a photo of a prescription or medical document.
 
 Rules:
-1. Transcribe what is actually written. NEVER invent a medicine, dose or instruction. If something is
-   unreadable or unclear, leave that field null and set "needs_review" to true.
-2. Keep medicine names exactly as printed (Latin script) so the patient can match them to the box.
+
+1. ACCURATE OCR TRANSCRIPTION:
+
+   Carefully inspect the entire prescription image before extracting information.
+
+   - Read all visible text, including headings, medicine names,
+     dosages, handwritten notes and instructions.
+   - Preserve the original wording and spelling in extracted_text.
+   - Do not silently correct spelling or complete partially visible words.
+   - Do not guess medicine names from familiar drug names or context.
+   - If text is illegible, represent it as "[illegible]" in extracted_text.
+   - If a specific medicine detail cannot be read confidently,
+     set that field to null and needs_review to true.
+   - Do not omit difficult-to-read sections.
+
+2. MEDICINE NAME AND DOSE ACCURACY:
+
+   - Keep medicine names in their original Latin script.
+   - Preserve brand names and generic names exactly as written.
+   - Never substitute a familiar medicine for an unclear medicine name.
+   - Keep strength and dosage separate from medicine names.
+   - Do not confuse tablet strength, number of tablets and frequency.
+   - If the medicine name or dosage is uncertain, flag it for human review.
 3. Write "summary", "instructions_simple", "warnings" and "follow_up" in the requested language, in short,
    simple, everyday words a person with little schooling can understand. No medical jargon.
 4. Understand common abbreviations: OD/QD = once a day, BD/BID = twice a day, TDS/TID = three times a day,
@@ -419,8 +439,8 @@ def assess_image_quality(image_bytes: bytes) -> dict:
 
             if brightness < 50:
                 warnings.append("image_too_dark")
-            elif brightness > 220:
-                warnings.append("image_too_bright")
+            # elif brightness > 220:
+            #     warnings.append("image_too_bright")
 
             if contrast < 25:
                 warnings.append("low_contrast")
