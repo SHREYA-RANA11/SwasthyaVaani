@@ -3,9 +3,11 @@ from io import BytesIO
 
 import pytest
 from PIL import Image
-
-from app.services.ai import _preprocess_image, AIError
-
+from app.services.ai import (
+    _preprocess_image,
+    assess_image_quality,
+    AIError,
+)
 
 def create_image(format="JPEG", size=(100, 100), mode="RGB"):
     buffer = BytesIO()
@@ -79,3 +81,60 @@ def test_small_image_dimensions_preserved():
 
     with Image.open(BytesIO(processed)) as image:
         assert image.size == (400, 300)
+def test_image_quality_assessment_returns_metrics():
+    original = create_image("JPEG", size=(1200, 1600))
+
+    result = assess_image_quality(original)
+
+    assert result["width"] == 1200
+    assert result["height"] == 1600
+    assert "brightness" in result
+    assert "contrast" in result
+    assert "sharpness" in result
+    assert isinstance(result["warnings"], list)
+
+
+def test_image_quality_rejects_invalid_image():
+    with pytest.raises(AIError):
+        assess_image_quality(b"invalid image data")
+def test_detects_dark_image():
+    original = create_image("JPEG", size=(1200, 1600), mode="RGB")
+    dark = Image.new("RGB", (1200, 1600), (20, 20, 20))
+
+    buffer = BytesIO()
+    dark.save(buffer, format="JPEG")
+
+    result = assess_image_quality(buffer.getvalue())
+
+    assert "image_too_dark" in result["warnings"]
+
+
+def test_detects_bright_image():
+    bright = Image.new("RGB", (1200, 1600), (255, 255, 255))
+
+    buffer = BytesIO()
+    bright.save(buffer, format="JPEG")
+
+    result = assess_image_quality(buffer.getvalue())
+
+    assert "image_too_bright" in result["warnings"]
+
+
+def test_detects_low_contrast():
+    low_contrast = Image.new("RGB", (1200, 1600), (125, 125, 125))
+
+    buffer = BytesIO()
+    low_contrast.save(buffer, format="JPEG")
+
+    result = assess_image_quality(buffer.getvalue())
+
+    assert "low_contrast" in result["warnings"]
+def test_detects_blurry_image():
+    blurry = Image.new("RGB", (1200, 1600), (180, 180, 180))
+
+    buffer = BytesIO()
+    blurry.save(buffer, format="JPEG")
+
+    result = assess_image_quality(buffer.getvalue())
+
+    assert "possible_blur" in result["warnings"]

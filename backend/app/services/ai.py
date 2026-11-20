@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 from PIL import (
     Image,
     ImageEnhance,
+    ImageFilter,
     ImageOps,
     ImageStat,
     UnidentifiedImageError,
