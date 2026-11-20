@@ -2,7 +2,7 @@
 from io import BytesIO
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 from app.services.ai import (
     _preprocess_image,
     assess_image_quality,
@@ -130,7 +130,14 @@ def test_detects_low_contrast():
 
     assert "low_contrast" in result["warnings"]
 def test_detects_blurry_image():
-    blurry = Image.new("RGB", (1200, 1600), (180, 180, 180))
+    sharp = Image.new("RGB", (1200, 1600), "white")
+    draw = ImageDraw.Draw(sharp)
+
+    draw.text((100, 200), "Prescription: Paracetamol 500 mg", fill="black")
+    draw.text((100, 300), "Take twice daily after meals", fill="black")
+    draw.text((100, 400), "Duration: 5 days", fill="black")
+
+    blurry = sharp.filter(ImageFilter.GaussianBlur(radius=8))
 
     buffer = BytesIO()
     blurry.save(buffer, format="JPEG")
