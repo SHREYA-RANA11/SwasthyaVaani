@@ -190,6 +190,9 @@ Rules:
    - If the medicine name or dosage is uncertain, flag it for human review.
 3. Write "summary", "instructions_simple", "warnings" and "follow_up" in the requested language, in short,
    simple, everyday words a person with little schooling can understand. No medical jargon.
+   - Only include warnings that are explicitly written in the prescription.
+   - Never invent medication cautions, side effects, or treatment advice.
+   - If no warning is written, return an empty warnings list.
 4. MEDICAL ABBREVIATION SAFETY:
 
    - Expand an abbreviation only when its meaning is clear
