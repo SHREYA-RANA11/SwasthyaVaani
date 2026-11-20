@@ -260,7 +260,7 @@ Reply with ONE JSON object and nothing else, in exactly this shape:
     {"name": "", "dose": null, "frequency_per_day": 1, "times": [], "duration_days": null,
      "food": "after_food", "instructions_simple": "", "instructions_original": ""}
   ],
-  "warnings": ["important cautions, e.g. finish the full course, avoid alcohol, see a doctor if symptoms worsen"],
+  "warnings": [],,
   "follow_up": null,
   "confidence": "high",
   "needs_review": false
