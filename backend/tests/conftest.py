@@ -44,12 +44,31 @@ def people(client):
         ("patient", "Sita Devi", "p2@test.com"),
         ("healthcare-worker", "Dr Asha", "w@test.com"),
     ]:
-        r = client.post(f"/auth/register/{kind}",
-                        json={"full_name": name, "email": email, "password": "password123"})
+        r = client.post(
+            f"/auth/register/{kind}",
+            json={
+                "full_name": name,
+                "email": email,
+                "password": "password123",
+                "native_language": "Gujarati",
+                "preferred_language": "English",
+            },
+        )
         assert r.status_code == 201, r.text
+
     db = SessionLocal()
-    db.add(User(full_name="Admin", email="a@test.com",
-                hashed_password=hash_password("password123"), role=UserRole.ADMIN))
+    db.add(
+        User(
+            full_name="Admin",
+            email="a@test.com",
+            hashed_password=hash_password("password123"),
+            role=UserRole.ADMIN,
+        )
+    )
     db.commit()
     db.close()
-    return {k: _login(client, f"{k}@test.com") for k in ["p1", "p2", "w", "a"]}
+
+    return {
+        k: _login(client, f"{k}@test.com")
+        for k in ["p1", "p2", "w", "a"]
+    }
