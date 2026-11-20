@@ -11,7 +11,13 @@ from typing import List, Optional
 
 import httpx
 from pydantic import BaseModel, Field, field_validator
-from PIL import Image, ImageEnhance, ImageOps, UnidentifiedImageError
+from PIL import (
+    Image,
+    ImageEnhance,
+    ImageOps,
+    ImageStat,
+    UnidentifiedImageError,
+)
 
 from app.core.config import settings
 
@@ -371,7 +377,68 @@ def _mock(language: str) -> AIResult:
         ],
         warnings=t["warnings"], follow_up=t["follow"], confidence="high", needs_review=False,
     )
+def assess_image_quality(image_bytes: bytes) -> dict:
+    """
+    Assess prescription image quality before AI analysis.
 
+    Returns image measurements and warnings.
+    Does not reject images automatically.
+    """
+    try:
+        with Image.open(BytesIO(image_bytes)) as original:
+            original.load()
+            img = ImageOps.exif_transpose(original).convert("RGB")
+
+            width, height = img.size
+            gray = img.convert("L")
+
+            # Average brightness: 0 (dark) to 255 (bright).
+            stats = ImageStat.Stat(gray)
+            brightness = stats.mean[0]
+
+            # Contrast indicator.
+            contrast = stats.stddev[0]
+
+            # Initial sharpness indicator using edge information.
+            edges = gray.filter(ImageFilter.FIND_EDGES)
+            sharpness = ImageStat.Stat(edges).var[0]
+
+            warnings = []
+
+            if width < 600 or height < 600:
+                warnings.append("low_resolution")
+
+            if brightness < 50:
+                warnings.append("image_too_dark")
+            elif brightness > 220:
+                warnings.append("image_too_bright")
+
+            if contrast < 25:
+                warnings.append("low_contrast")
+
+            if sharpness < 50:
+                warnings.append("possible_blur")
+
+            return {
+                "width": width,
+                "height": height,
+                "brightness": round(brightness, 2),
+                "contrast": round(contrast, 2),
+                "sharpness": round(sharpness, 2),
+                "is_acceptable": len(warnings) == 0,
+                "warnings": warnings,
+            }
+
+    except (
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+        Image.DecompressionBombError,
+    ):
+        raise AIError(
+            "The prescription image could not be assessed. "
+            "Please upload a valid image."
+        )
 
 def _preprocess_image(image_bytes: bytes, mime: str) -> tuple[bytes, str]:
     """
@@ -504,4 +571,4 @@ def test_small_image_dimensions_preserved():
     processed, mime = _preprocess_image(original, "image/jpeg")
 
     with Image.open(BytesIO(processed)) as image:
-        assert image.size == (400, 300)
+        assert image.size == (400, 300) 
