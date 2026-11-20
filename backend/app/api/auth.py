@@ -15,7 +15,8 @@ from app.schemas.user import (
     UserRegister,
     UserResponse,
     UserLogin,
-    TokenResponse
+    TokenResponse,
+    ProfileUpdate
 )
 
 router = APIRouter(
@@ -56,12 +57,14 @@ def register_user(
             )
 
     new_user = User(
-        full_name=user_data.full_name.strip(),
-        email=email,
-        phone=phone,
-        hashed_password=hash_password(user_data.password),
-        role=role
-    )
+    full_name=user_data.full_name.strip(),
+    email=email,
+    phone=phone,
+    hashed_password=hash_password(user_data.password),
+    role=role,
+    native_language=user_data.native_language,
+    preferred_language=user_data.preferred_language
+)
 
     try:
         db.add(new_user)
@@ -155,7 +158,49 @@ def get_my_profile(
     current_user: User = Depends(get_current_user)
 ):
     return current_user
+@router.put("/me", response_model=UserResponse)
+def update_my_profile(
+    profile_data: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    update_data = profile_data.model_dump(exclude_unset=True)
 
+    if "full_name" in update_data:
+        update_data["full_name"] = update_data["full_name"].strip()
+
+    if "phone" in update_data:
+        phone = update_data["phone"]
+        phone = phone.strip() if phone else None
+
+        if phone:
+            existing_phone = db.query(User).filter(
+                User.phone == phone,
+                User.id != current_user.id
+            ).first()
+
+            if existing_phone:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Phone number is already registered"
+                )
+
+        update_data["phone"] = phone
+
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+
+    try:
+        db.commit()
+        db.refresh(current_user)
+        return current_user
+
+    except Exception:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to update profile"
+        )
 # Patient-only endpoint
 @router.get("/patient-area")
 def patient_area(

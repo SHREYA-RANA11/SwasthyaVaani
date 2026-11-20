@@ -1,3 +1,4 @@
+
 from datetime import date
 from typing import Literal, Optional
 
@@ -12,6 +13,9 @@ class UserRegister(BaseModel):
     phone: Optional[str] = Field(default=None, max_length=20)
     password: str = Field(min_length=8, max_length=128)
 
+    native_language: Language
+    preferred_language: Language
+
 
 class UserResponse(BaseModel):
     id: int
@@ -23,6 +27,7 @@ class UserResponse(BaseModel):
     date_of_birth: Optional[date] = None
     gender: Optional[str] = None
     address: Optional[str] = None
+    native_language: Optional[Language] = None
     preferred_language: str = "English"
 
     model_config = ConfigDict(from_attributes=True)
@@ -34,6 +39,7 @@ class ProfileUpdate(BaseModel):
     date_of_birth: Optional[date] = None
     gender: Optional[str] = Field(default=None, max_length=20)
     address: Optional[str] = Field(default=None, max_length=500)
+    native_language: Optional[Language] = None
     preferred_language: Optional[Language] = None
 
 

@@ -48,6 +48,10 @@ class User(Base):
         default="English",
         nullable=False
     )
+    native_language = Column(
+    String(50),
+    nullable=True
+)
 
     created_at = Column(
         DateTime(timezone=True),
