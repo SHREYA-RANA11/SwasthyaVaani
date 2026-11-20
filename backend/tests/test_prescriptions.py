@@ -89,7 +89,16 @@ def test_delete_removes_record_and_file(client, people):
 
 def test_schedule_and_marking_doses(client, people):
     # fresh patient so the schedule only has this prescription
-    client.post("/auth/register/patient", json={"full_name": "Sched", "email": "s@test.com", "password": "password123"})
+    client.post(
+    "/auth/register/patient",
+    json={
+        "full_name": "Sched",
+        "email": "s@test.com",
+        "password": "password123",
+        "native_language": "Gujarati",
+        "preferred_language": "English",
+    },
+)
     h = {"Authorization": "Bearer " + client.post("/auth/login", json={"email": "s@test.com", "password": "password123"}).json()["access_token"]}
     upload(client, h)
 
@@ -176,6 +185,7 @@ MESSY = ('```json\n{"is_prescription": true, "summary": "ok", "confidence": "HIG
 
 
 def _check(result):
+    assert result.needs_review is True
     assert [m.name for m in result.medicines] == ["Metformin 500", "Cetirizine"]   # nameless one dropped
     m, c = result.medicines
     assert m.times == []           # invalid times replaced by a consistent schedule
