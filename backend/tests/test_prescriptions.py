@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.services import ai
 
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 
 def make_test_jpeg():
     buffer = BytesIO()
@@ -15,6 +15,32 @@ def make_test_jpeg():
     return buffer.getvalue()
 
 JPEG = make_test_jpeg()
+def make_blurry_jpeg():
+    image = Image.new("RGB", (1200, 1600), "white")
+    draw = ImageDraw.Draw(image)
+
+    draw.text(
+        (100, 200),
+        "Prescription: Paracetamol 500 mg",
+        fill="black",
+    )
+    draw.text(
+        (100, 300),
+        "Take twice daily after meals",
+        fill="black",
+    )
+    draw.text(
+        (100, 400),
+        "Duration: 5 days",
+        fill="black",
+    )
+
+    image = image.filter(ImageFilter.GaussianBlur(radius=8))
+
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG")
+
+    return buffer.getvalue()
 IST = timezone(timedelta(hours=5, minutes=30))
 TODAY = datetime.now(IST).date().isoformat()
 
@@ -50,7 +76,27 @@ def test_upload_and_translation(client, people):
     assert len(rx["medications"]) == 3
     assert rx["medications"][0]["start_date"] == TODAY
     assert rx["disclaimer"]
+def test_blurry_prescription_upload_requires_review(client, people):
+    blurry_image = make_blurry_jpeg()
 
+    response = upload(
+        client,
+        people["p1"],
+        data=blurry_image,
+    )
+
+    assert response.status_code == 201, response.text
+
+    prescription = response.json()
+
+    # Poor image quality should not automatically reject the upload.
+    assert prescription["status"] == "processed"
+
+    # Blur warning should be saved in the prescription record.
+    assert "possible_blur" in prescription["warnings"]
+
+    # The prescription should require human review.
+    assert prescription["needs_review"] is True
 
 def test_gujarati_and_retranslate(client, people):
     rx = upload(client, people["p1"], "Gujarati").json()
