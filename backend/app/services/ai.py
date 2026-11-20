@@ -190,8 +190,20 @@ Rules:
    - If the medicine name or dosage is uncertain, flag it for human review.
 3. Write "summary", "instructions_simple", "warnings" and "follow_up" in the requested language, in short,
    simple, everyday words a person with little schooling can understand. No medical jargon.
-4. Understand common abbreviations: OD/QD = once a day, BD/BID = twice a day, TDS/TID = three times a day,
-   QID = four times a day, HS = at bedtime, SOS/PRN = only when needed, AC = before food, PC = after food.
+4. MEDICAL ABBREVIATION SAFETY:
+
+   - Expand an abbreviation only when its meaning is clear
+     from the prescription context.
+   - OD/QD may mean once daily, but OD can also mean right eye.
+     Do not interpret OD as once daily in an eye prescription.
+   - BD/BID = twice daily, TDS/TID = three times daily,
+     QID = four times daily, HS = at bedtime.
+   - SOS/PRN = as needed, AC = before food,
+     PC = after food.
+   - If an abbreviation has multiple possible meanings,
+     do not guess. Preserve it in extracted_text,
+     leave the affected field null where appropriate,
+     and set needs_review to true.
 5. "times" are 24-hour "HH:MM" clock times.
 
    Only extract clock times when they are explicitly written
