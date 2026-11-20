@@ -80,21 +80,45 @@ def _load(db: Session, rx_id: int, user: User) -> Prescription:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Prescription not found")
     return rx
 
-
 def _run_analysis(db: Session, rx: Prescription, image: bytes, language: str) -> None:
     """Call the AI and store the result. Never raises: failures are saved on the record."""
     rx.language = language
     rx.status = "processing"
     rx.error_message = None
     db.commit()
+
+    # Assess image quality before AI analysis.
+    image_quality_warnings = []
+
+    try:
+        quality = ai.assess_image_quality(image)
+
+        # Only use warnings that have been tested and calibrated provisionally.
+        supported_warnings = {"low_resolution", "possible_blur"}
+
+        image_quality_warnings = [
+            warning
+            for warning in quality["warnings"]
+            if warning in supported_warnings
+        ]
+
+    except ai.AIError:
+        image_quality_warnings = ["image_quality_assessment_failed"]
+
     try:
         result = ai.analyze_prescription(image, rx.content_type, language)
+
     except ai.AIError as e:
-        rx.status, rx.error_message = "failed", str(e)[:500]
+        rx.status = "failed"
+        rx.error_message = str(e)[:500]
+        rx.warnings = image_quality_warnings
         db.commit()
         return
+
     except Exception:
-        rx.status, rx.error_message = "failed", "Something went wrong while reading the prescription."
+        rx.status = "failed"
+        rx.error_message = "Something went wrong while reading the prescription."
+        rx.warnings = image_quality_warnings
         db.commit()
         return
 
@@ -102,25 +126,42 @@ def _run_analysis(db: Session, rx: Prescription, image: bytes, language: str) ->
     rx.diagnosis = (result.diagnosis or None) and result.diagnosis[:500]
     rx.extracted_text = result.extracted_text
     rx.summary = result.summary
-    rx.warnings = result.warnings
+
+    # Preserve AI warnings and add image-quality warnings without duplicates.
+    rx.warnings = list(dict.fromkeys(
+        (result.warnings or []) + image_quality_warnings
+    ))
+
     rx.follow_up = (result.follow_up or None) and result.follow_up[:500]
     rx.confidence = result.confidence
-    rx.needs_review = result.needs_review
+
+    # Poor image quality requires additional review.
+    rx.needs_review = (
+        result.needs_review or bool(image_quality_warnings)
+    )
+
     rx.reviewed_by_id, rx.reviewed_at = None, None
     rx.ai_provider = settings.AI_PROVIDER.lower()
     rx.status = "processed"
 
-    # Replace medicines (old dose history goes with them) and build the schedule from today
+    # Replace medicines (old dose history goes with them) and build the schedule from today.
     rx.medications.clear()
     start = _today()
+
     for m in result.medicines:
         rx.medications.append(Medication(
-            name=m.name, dose=m.dose and m.dose[:100], frequency_per_day=m.frequency_per_day,
-            times=m.times, duration_days=m.duration_days, start_date=start,
+            name=m.name,
+            dose=m.dose and m.dose[:100],
+            frequency_per_day=m.frequency_per_day,
+            times=m.times,
+            duration_days=m.duration_days,
+            start_date=start,
             end_date=start + timedelta(days=m.duration_days - 1) if m.duration_days else None,
-            food=m.food, instructions_simple=m.instructions_simple,
+            food=m.food,
+            instructions_simple=m.instructions_simple,
             instructions_original=m.instructions_original,
         ))
+
     db.commit()
 
 

@@ -145,3 +145,29 @@ def test_detects_blurry_image():
     result = assess_image_quality(buffer.getvalue())
 
     assert "possible_blur" in result["warnings"]
+def test_sharp_text_is_not_flagged_as_blurry():
+    sharp = Image.new("RGB", (1200, 1600), "white")
+    draw = ImageDraw.Draw(sharp)
+
+    draw.text(
+        (100, 200),
+        "Prescription: Paracetamol 500 mg",
+        fill="black",
+    )
+    draw.text(
+        (100, 300),
+        "Take twice daily after meals",
+        fill="black",
+    )
+    draw.text(
+        (100, 400),
+        "Duration: 5 days",
+        fill="black",
+    )
+
+    buffer = BytesIO()
+    sharp.save(buffer, format="JPEG")
+
+    result = assess_image_quality(buffer.getvalue())
+
+    assert "possible_blur" not in result["warnings"]
