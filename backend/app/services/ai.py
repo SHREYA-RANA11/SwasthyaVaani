@@ -401,8 +401,16 @@ def assess_image_quality(image_bytes: bytes) -> dict:
             contrast = stats.stddev[0]
 
             # Initial sharpness indicator using edge information.
-            edges = gray.filter(ImageFilter.FIND_EDGES)
-            sharpness = ImageStat.Stat(edges).var[0]
+              # Laplacian variance: preliminary blur indicator.
+            laplacian = ImageFilter.Kernel(
+              size=(3, 3),
+               kernel=(0, 1, 0, 1, -4, 1, 0, 1, 0),
+               scale=1,
+               offset=128,
+)
+
+            laplacian_image = gray.filter(laplacian)
+            sharpness = ImageStat.Stat(laplacian_image).var[0]
 
             warnings = []
 
@@ -417,7 +425,7 @@ def assess_image_quality(image_bytes: bytes) -> dict:
             if contrast < 25:
                 warnings.append("low_contrast")
 
-            if sharpness < 50:
+            if sharpness < 55:
                 warnings.append("possible_blur")
 
             return {
